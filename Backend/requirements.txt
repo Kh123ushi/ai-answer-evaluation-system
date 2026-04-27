@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pytesseract
+pillow
+sentence-transformers
+scikit-learn
+textblob
+python-multipart
+easyocr
+opencv-python
