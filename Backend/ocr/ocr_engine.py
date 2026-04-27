@@ -1,77 +1,69 @@
-import cv2
-import pytesseract
+# ocr/ocr_engine.py
+
 import easyocr
-from PIL import Image
+import cv2
 import numpy as np
 
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-
+# Load once when server starts
 reader = easyocr.Reader(['en'], gpu=False)
 
 
+# ===============================
+# Image Preprocessing
+# ===============================
 def preprocess_image(image_path):
-    img = cv2.imread(image_path)
+    try:
+        img = cv2.imread(image_path)
 
-    if img is None:
-        return None
+        if img is None:
+            return image_path
 
-    # Resize bigger
-    img = cv2.resize(img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        # Resize for better OCR
+        img = cv2.resize(
+            img,
+            None,
+            fx=2,
+            fy=2,
+            interpolation=cv2.INTER_CUBIC
+        )
 
-    # Gray
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        # Convert to grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # Sharpen
-    kernel = np.array([[0,-1,0],
-                       [-1,5,-1],
-                       [0,-1,0]])
-    sharp = cv2.filter2D(gray, -1, kernel)
+        # Noise removal
+        blur = cv2.GaussianBlur(gray, (3, 3), 0)
 
-    # Threshold
-    thresh = cv2.threshold(
-        sharp, 0, 255,
-        cv2.THRESH_BINARY + cv2.THRESH_OTSU
-    )[1]
+        # Thresholding
+        thresh = cv2.threshold(
+            blur,
+            0,
+            255,
+            cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        )[1]
 
-    return thresh
+        return thresh
 
-
-def extract_easyocr(image_path):
-    result = reader.readtext(image_path, paragraph=True)
-
-    text = " ".join([item[1] for item in result])
-
-    return text.strip()
-
-
-def extract_tesseract(processed_img):
-    pil = Image.fromarray(processed_img)
-
-    text = pytesseract.image_to_string(
-        pil,
-        config='--oem 3 --psm 6'
-    )
-
-    return text.strip()
+    except Exception as e:
+        print("Preprocessing Error:", e)
+        return image_path
 
 
+# ===============================
+# OCR Function
+# ===============================
 def extract_text(image_path):
     try:
-        processed = preprocess_image(image_path)
+        processed_img = preprocess_image(image_path)
 
-        # PRIORITY handwriting OCR
-        easy_text = extract_easyocr(image_path)
+        result = reader.readtext(
+            processed_img,
+            paragraph=True,
+            detail=0
+        )
 
-        # fallback
-        tess_text = extract_tesseract(processed)
+        text = " ".join(result)
 
-        # choose smarter
-        if len(easy_text.split()) >= 3:
-            print("Using EasyOCR")
-            return easy_text
-
-        print("Using Tesseract")
-        return tess_text
+        return text.strip()
 
     except Exception as e:
         print("OCR Error:", e)
